@@ -13,7 +13,12 @@ for f, cols in [(FILE_NAME, ["Date", "Category", "Amount", "Note"]), (GOAL_FILE,
 
 st.set_page_config(page_title="Executive Finance Tracker", layout="wide")
 
-# 2. SIDEBAR - CONFIGURATION & ENTRY
+# 2. DATA LOADING & PREP
+df = pd.read_csv(FILE_NAME)
+df['Date'] = pd.to_datetime(df['Date'])
+goals_df = pd.read_csv(GOAL_FILE)
+
+# 3. SIDEBAR - CONFIGURATION & ENTRY
 with st.sidebar:
     st.header("⚙️ Settings & Entry")
     
@@ -21,7 +26,6 @@ with st.sidebar:
         new_cat = st.text_input("Category Name")
         new_goal = st.number_input("Monthly Goal ($)", min_value=0.0, step=50.0)
         if st.button("Set Goal"):
-            goals_df = pd.read_csv(GOAL_FILE)
             if new_cat in goals_df['Category'].values:
                 goals_df.loc[goals_df['Category'] == new_cat, 'Goal'] = new_goal
             else:
@@ -32,7 +36,6 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("📝 Log Expense")
-    goals_df = pd.read_csv(GOAL_FILE)
     categories = goals_df['Category'].tolist()
     
     if not categories:
@@ -47,18 +50,34 @@ with st.sidebar:
                 pd.DataFrame([[date, cat, amt, note]], columns=["Date", "Category", "Amount", "Note"]).to_csv(FILE_NAME, mode='a', header=False, index=False)
                 st.rerun()
 
-# 3. DATA CALCULATIONS
-df = pd.read_csv(FILE_NAME)
-df['Date'] = pd.to_datetime(df['Date'])
-month_df = df[df['Date'].dt.month == datetime.now().month]
-
-# 4. MAIN DASHBOARD
+# 4. MAIN DASHBOARD - MONTH SELECTOR
 st.title("📊 Executive Finance Summary")
-st.subheader(f"Status for {datetime.now().strftime('%B %Y')}")
 
+# Create a list of available months from the data for the dropdown
+if not df.empty:
+    df['Month_Year'] = df['Date'].dt.strftime('%B %Y')
+    available_months = df['Month_Year'].unique().tolist()
+    current_mo_str = datetime.now().strftime('%B %Y')
+    
+    if current_mo_str not in available_months:
+        available_months.insert(0, current_mo_str)
+    
+    # The Selector
+    selected_month = st.selectbox("Select View Month", available_months, index=available_months.index(current_mo_str))
+    
+    # Filter data for selected month
+    view_df = df[df['Month_Year'] == selected_month]
+else:
+    selected_month = datetime.now().strftime('%B %Y')
+    view_df = pd.DataFrame()
+    st.info("No transactions found. Log an expense to begin!")
+
+st.markdown("---")
+
+# 5. DISPLAY RESULTS
 if not goals_df.empty:
     total_goal = goals_df['Goal'].sum()
-    total_spent = month_df['Amount'].sum()
+    total_spent = view_df['Amount'].sum() if not view_df.empty else 0
     remaining_total = total_goal - total_spent
     
     # Header Metric
@@ -68,11 +87,9 @@ if not goals_df.empty:
     c3.metric("Remaining", f"${remaining_total:,.2f}", delta=f"{remaining_total:,.2f}")
 
     st.markdown("---")
+    st.subheader(f"Breakdown: {selected_month}")
     
-    # Category List with Color Coding
-    st.subheader("Category Breakdown")
-    
-    # Create a nice header for our list
+    # Table Header
     h1, h2, h3, h4 = st.columns([2, 1, 1, 1])
     h1.write("**Category**")
     h2.write("**Budgeted**")
@@ -82,23 +99,23 @@ if not goals_df.empty:
 
     for _, row in goals_df.iterrows():
         cat, goal = row['Category'], row['Goal']
-        spent = month_df[month_df['Category'] == cat]['Amount'].sum()
+        spent = view_df[view_df['Category'] == cat]['Amount'].sum() if not view_df.empty else 0
         difference = goal - spent
         
-        # Color coding logic
         color = "green" if difference >= 0 else "red"
         symbol = "+" if difference >= 0 else ""
         
-        # Display Row
         r1, r2, r3, r4 = st.columns([2, 1, 1, 1])
         r1.write(cat)
         r2.write(f"${goal:,.2f}")
         r3.write(f"${spent:,.2f}")
         r4.markdown(f":{color}[**{symbol}{difference:,.2f}**]")
-
 else:
     st.info("Start by adding categories and goals in the sidebar!")
 
 st.markdown("---")
-st.subheader("Recent Activity")
-st.dataframe(df.sort_values(by="Date", ascending=False), use_container_width=True)
+st.subheader(f"Activity for {selected_month}")
+if not view_df.empty:
+    st.dataframe(view_df.sort_values(by="Date", ascending=False), use_container_width=True)
+else:
+    st.write("No transactions for this month yet.")
