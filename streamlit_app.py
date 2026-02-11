@@ -106,4 +106,4 @@ else:
 
 st.divider()
 st.subheader("Recent Transactions")
-st.dataframe(df_tx.sort_values(by="Date", ascending=False), use_container
+st.dataframe(df_tx.sort_values(by="Date", ascending=False), use_container_width=True)
