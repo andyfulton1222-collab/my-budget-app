@@ -7,17 +7,15 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Nested Envelope Fix)
+# 2. INITIALIZE CONNECTION (The Unified Object Fix)
 try:
     # 1. Get all raw secrets
     raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. Extract the URL separately
-    target_url = raw_secrets.get("spreadsheet_url")
-    
-    # 3. Build the Google Service Account "Envelope"
-    # This keeps 'project_id' and others out of the main function call
+    # 2. Build the "One Object" that contains EVERYTHING
+    # We name the URL 'spreadsheet' inside the dict to satisfy the inner engine.
     sa_info = {
+        "spreadsheet": raw_secrets.get("spreadsheet_url"),
         "type": "service_account",
         "project_id": raw_secrets.get("project_id"),
         "private_key_id": raw_secrets.get("private_key_id"),
@@ -30,11 +28,11 @@ try:
         "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
     }
 
-    # 4. Connect! Using the two specific boxes the library recognizes.
+    # 3. Connect! We only pass 'type' and 'service_account_info'.
+    # This prevents 'spreadsheet_url' from being seen as an "unexpected argument".
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet_url=target_url, 
         service_account_info=sa_info
     )
     
