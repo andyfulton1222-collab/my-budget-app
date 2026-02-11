@@ -7,27 +7,40 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Direct Unpacking Fix)
+# 2. INITIALIZE CONNECTION (The Nested Envelope Fix)
 try:
-    # Get all secrets into one dictionary
-    conf = st.secrets["connections"]["gsheets"].to_dict()
+    # Get all secrets
+    raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
     
-    # RESOLVE THE CONFLICTS:
-    # 1. The library wants 'spreadsheet', not 'spreadsheet_url'
-    if "spreadsheet_url" in conf:
-        conf["spreadsheet"] = conf.pop("spreadsheet_url")
+    # 1. Extract the URL separately
+    target_url = raw_secrets.get("spreadsheet_url")
     
-    # 2. Remove 'type' because it conflicts with Streamlit's internal connection type
-    conf.pop("type", None)
+    # 2. Fix the private key line breaks
+    if "private_key" in raw_secrets:
+        raw_secrets["private_key"] = raw_secrets["private_key"].replace("\\n", "\n")
     
-    # 3. Fix the private key line breaks
-    if "private_key" in conf:
-        conf["private_key"] = conf["private_key"].replace("\\n", "\n")
-    
-    # 4. Connect! We "unpack" the dictionary using **
-    # This sends every single key (project_id, private_key, spreadsheet, etc.) 
-    # as its own separate argument to the connection.
-    conn = st.connection("gsheets", type=GSheetsConnection, **conf)
+    # 3. Put all Google-specific fields into a nested dictionary
+    # This is the "envelope" the library actually wants
+    sa_info = {
+        "type": "service_account",
+        "project_id": raw_secrets.get("project_id"),
+        "private_key_id": raw_secrets.get("private_key_id"),
+        "private_key": raw_secrets.get("private_key"),
+        "client_email": raw_secrets.get("client_email"),
+        "client_id": raw_secrets.get("client_id"),
+        "auth_uri": raw_secrets.get("auth_uri"),
+        "token_uri": raw_secrets.get("token_uri"),
+        "auth_provider_x509_cert_url": raw_secrets.get("auth_provider_x509_cert_url"),
+        "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
+    }
+
+    # 4. Connect using the proper keyword arguments
+    conn = st.connection(
+        "gsheets", 
+        type=GSheetsConnection, 
+        spreadsheet=target_url, 
+        service_account_info=sa_info
+    )
     
 except Exception as e:
     st.error(f"Connection Error: {e}")
@@ -88,15 +101,9 @@ if not df_goals.empty:
     for i, row in comparison.iterrows():
         col_idx = i % 4
         color = "normal" if row['Remaining'] >= 0 else "inverse"
-        cols[col_idx].metric(
-            label=row['Category'], 
-            value=f"${row['Amount']:,.2f}", 
-            delta=f"${row['Remaining']:,.2f} Left", 
-            delta_color=color
-        )
+        cols[col_idx].metric(label=row['Category'], value=f"${row['Amount']:,.2f}", delta=f"${row['Remaining']:,.2f} Left", delta_color=color)
     
-    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], 
-                 barmode='group', title="Monthly Spending vs. Goals")
+    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], barmode='group', title="Monthly Spending vs. Goals")
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Start by adding your first Budget Goal in the sidebar!")
