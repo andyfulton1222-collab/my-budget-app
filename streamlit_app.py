@@ -7,17 +7,21 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The "All-in-One" Handshake)
+# 2. INITIALIZE CONNECTION (The Surgical Conflict Resolution)
 try:
     # Get secrets and convert to a dictionary
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # Clean the private key line breaks
+    # RESOLVE THE CONFLICT:
+    # We remove 'type' from the dictionary because st.connection already 
+    # uses the 'type' argument for GSheetsConnection.
+    conf.pop("type", None)
+    
+    # Fix the private key line breaks
     if "private_key" in conf:
         conf["private_key"] = conf["private_key"].replace("\\n", "\n")
     
-    # We pass EVERYTHING inside a single configuration dictionary 
-    # This prevents the 'unexpected keyword argument' errors
+    # Connect using the cleaned dictionary
     conn = st.connection("gsheets", type=GSheetsConnection, **conf)
 except Exception as e:
     st.error(f"Connection Error: {e}")
