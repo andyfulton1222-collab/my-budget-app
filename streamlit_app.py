@@ -8,13 +8,26 @@ import json
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION
-# We pull the JSON string, fix the newlines, and turn it into a real dictionary
-if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-    service_account_info = json.loads(st.secrets["connections"]["gsheets"]["service_account_json"])
-    conn = st.connection("gsheets", type=GSheetsConnection, service_account=service_account_info)
-else:
-    st.error("Secrets not found!")
+# 2. INITIALIZE CONNECTION (The JSON Bypass)
+try:
+    if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+        # Get the string and strip hidden whitespace
+        json_string = st.secrets["connections"]["gsheets"]["service_account_json"].strip()
+        
+        # Double-check that newlines are correctly interpreted
+        json_string = json_string.replace("\\\\n", "\\n")
+        
+        # Convert string to dictionary
+        service_account_info = json.loads(json_string)
+        
+        # Connect!
+        conn = st.connection("gsheets", type=GSheetsConnection, service_account=service_account_info)
+    else:
+        st.error("Secrets configuration missing in Streamlit Cloud!")
+        st.stop()
+except Exception as e:
+    st.error(f"Authentication Error: {e}")
+    st.info("Check your Secrets formatting. Ensure it starts with '''{ and ends with }'''")
     st.stop()
 
 # 3. LOAD DATA
@@ -24,6 +37,7 @@ def load_data():
         goals = conn.read(worksheet="Goals")
         return transactions, goals
     except Exception:
+        # Fallback if sheets are empty
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -37,8 +51,9 @@ with st.sidebar:
     with tab1:
         with st.form("add_transaction"):
             date = st.date_input("Date")
-            categories = df_goals['Category'].unique().tolist() if not df_goals.empty else ["General"]
-            category = st.selectbox("Category", options=categories)
+            # Categories pull from the Goals sheet
+            cat_list = df_goals['Category'].unique().tolist() if not df_goals.empty else ["General"]
+            category = st.selectbox("Category", options=cat_list)
             amount = st.number_input("Amount", min_value=0.0, step=0.01)
             note = st.text_input("Note")
             
@@ -63,20 +78,32 @@ with st.sidebar:
 
 # 5. MAIN DASHBOARD
 if not df_goals.empty:
+    # Calculation Logic
+    df_tx['Amount'] = pd.to_numeric(df_tx['Amount'], errors='coerce').fillna(0)
     spend_summary = df_tx.groupby('Category')['Amount'].sum().reset_index()
     comparison = pd.merge(df_goals, spend_summary, on='Category', how='left').fillna(0)
     comparison['Remaining'] = comparison['Monthly Goal'] - comparison['Amount']
     
-    cols = st.columns(len(comparison))
+    # KPIs
+    cols = st.columns(min(len(comparison), 4))
     for i, row in comparison.iterrows():
+        col_idx = i % 4
         color = "normal" if row['Remaining'] >= 0 else "inverse"
-        cols[i].metric(label=row['Category'], value=f"${row['Amount']:,.2f}", delta=f"${row['Remaining']:,.2f} Left", delta_color=color)
+        cols[col_idx].metric(
+            label=row['Category'], 
+            value=f"${row['Amount']:,.2f}", 
+            delta=f"${row['Remaining']:,.2f} Left", 
+            delta_color=color
+        )
     
-    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], barmode='group', title="Spending vs. Goals")
+    # Chart
+    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], 
+                 barmode='group', title="Spending vs. Goals",
+                 color_discrete_map={"Amount": "#EF553B", "Monthly Goal": "#636EFA"})
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Start by adding a Budget Goal in the sidebar!")
 
 st.divider()
 st.subheader("Recent Transactions")
-st.dataframe(df_tx.sort_values(by="Date", ascending=False), use_container_width=True)
+st.dataframe(df_tx.sort_values(by="Date", ascending=False), use_container
