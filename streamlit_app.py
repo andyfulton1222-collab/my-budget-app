@@ -7,29 +7,18 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Final Calibration)
+# 2. INITIALIZE CONNECTION (The "All-in-One" Handshake)
 try:
-    # 1. Get the raw secrets
-    secret_dict = st.secrets["connections"]["gsheets"].to_dict()
+    # Get secrets and convert to a dictionary
+    conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. Extract the URL (The library expects the name 'spreadsheet_url' here)
-    target_url = secret_dict.pop("spreadsheet_url", None)
+    # Clean the private key line breaks
+    if "private_key" in conf:
+        conf["private_key"] = conf["private_key"].replace("\\n", "\n")
     
-    # 3. Clean up the dictionary for the service account
-    if "type" in secret_dict:
-        del secret_dict["type"]
-    
-    # 4. Fix the private key line breaks
-    if "private_key" in secret_dict:
-        secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
-
-    # 5. Connect! Using the explicit 'spreadsheet_url' keyword
-    conn = st.connection(
-        "gsheets", 
-        type=GSheetsConnection, 
-        spreadsheet_url=target_url, 
-        service_account=secret_dict
-    )
+    # We pass EVERYTHING inside a single configuration dictionary 
+    # This prevents the 'unexpected keyword argument' errors
+    conn = st.connection("gsheets", type=GSheetsConnection, **conf)
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
