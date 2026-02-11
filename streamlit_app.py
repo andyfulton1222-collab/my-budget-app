@@ -7,55 +7,21 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. THE ULTIMATE CONNECTION ENGINE
+# 2. THE "AUTOMATIC" CONNECTION
+# We pass ZERO arguments. The library will look for [connections.gsheets] in your secrets.
 try:
-    # Get a modifiable dictionary of your secrets
-    raw_conf = st.secrets["connections"]["gsheets"].to_dict()
-    
-    # Clean the Private Key formatting
-    p_key = raw_conf.get("private_key", "")
-    header = "-----BEGIN PRIVATE KEY-----"
-    footer = "-----END PRIVATE KEY-----"
-    core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "").replace("\\n", "")
-    formatted_key = header + "\n"
-    for i in range(0, len(core_key), 64):
-        formatted_key += core_key[i:i+64] + "\n"
-    formatted_key += footer
-
-    # Build the "Everything" Bundle
-    # We put the spreadsheet URL INSIDE this info bundle to avoid argument errors
-    sa_info = {
-        "spreadsheet": raw_conf.get("spreadsheet_url"),
-        "type": "service_account",
-        "project_id": raw_conf.get("project_id"),
-        "private_key_id": raw_conf.get("private_key_id"),
-        "private_key": formatted_key,
-        "client_email": raw_conf.get("client_email"),
-        "client_id": raw_conf.get("client_id"),
-        "auth_uri": raw_conf.get("auth_uri"),
-        "token_uri": raw_conf.get("token_uri"),
-        "auth_provider_x509_cert_url": raw_conf.get("auth_provider_x509_cert_url"),
-        "client_x509_cert_url": raw_conf.get("client_x509_cert_url"),
-    }
-
-    # Connect with ONLY the service_account_info bundle
-    # This prevents the "unexpected keyword argument" error entirely
-    conn = st.connection(
-        "gsheets", 
-        type=GSheetsConnection, 
-        service_account_info=sa_info
-    )
-    
+    conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error(f"Setup Error: {e}")
+    st.error(f"Connection Error: {e}")
     st.stop()
 
-# 3. DATA LOADING
+# 3. LOAD DATA
 def load_data():
     try:
-        transactions = conn.read(worksheet="Transactions")
-        goals = conn.read(worksheet="Goals")
-        return transactions, goals
+        # worksheet names must match your Google Sheet exactly
+        df_tx = conn.read(worksheet="Transactions")
+        df_goals = conn.read(worksheet="Goals")
+        return df_tx, df_goals
     except Exception:
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
@@ -94,7 +60,7 @@ with st.sidebar:
                 st.success("Goal Saved!")
                 st.rerun()
 
-# 5. MAIN DASHBOARD
+# 5. DASHBOARD VISUALS
 if not df_goals.empty:
     df_tx['Amount'] = pd.to_numeric(df_tx['Amount'], errors='coerce').fillna(0)
     spend_summary = df_tx.groupby('Category')['Amount'].sum().reset_index()
