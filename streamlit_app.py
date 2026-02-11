@@ -7,32 +7,32 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. THE CLEANER & MANUAL CONFIG
+# 2. THE CLEANER & CONFLICT RESOLUTION
 try:
     # 1. Create a modifiable COPY of the secrets
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. THE RSA KEY CLEANER: Rebuilds the key to PEM standards
+    # 2. RESOLVE CONFLICT: Remove the 'type' key from the dict 
+    # so it doesn't clash with the 'type' argument in st.connection
+    conf.pop("type", None)
+    
+    # 3. THE RSA KEY CLEANER
     if "private_key" in conf:
         p_key = conf["private_key"]
         header = "-----BEGIN PRIVATE KEY-----"
         footer = "-----END PRIVATE KEY-----"
-        
-        # Strip everything and rebuild the 64-character block format
         core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "").replace("\\n", "")
         formatted_key = header + "\n"
         for i in range(0, len(core_key), 64):
             formatted_key += core_key[i:i+64] + "\n"
         formatted_key += footer
-        
         conf["private_key"] = formatted_key
 
-    # 3. Connect using the cleaned dictionary as a configuration
-    # We use 'spreadsheet' because that is the most common internal label for this library
+    # 4. Connect using 'spreadsheet_url' as the label
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet=conf.get("spreadsheet_url"), # Maps the URL correctly
+        spreadsheet_url=conf.get("spreadsheet_url"),
         **conf
     )
     
