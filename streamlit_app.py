@@ -1,68 +1,51 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import requests
-from io import StringIO
 
 st.set_page_config(page_title="Executive Budget", layout="wide")
-st.title("📊 Executive Budget Dashboard")
+st.title("📊 Executive Budget (Auto-Save Active)")
 
-# 1. Setup the Google Sheets Links
+# 1. Establish the Connection
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# 2. Read Existing Data
 try:
-    sheet_id = st.secrets["spreadsheet_id"]
-    url_tx = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Transactions"
-    url_goals = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Goals"
+    df_tx = conn.read(worksheet="Transactions", ttl=0)
+    df_goals = conn.read(worksheet="Goals", ttl=0)
 
-    # 2. Load the Data
-    df_tx = pd.read_csv(url_tx)
-    df_goals = pd.read_csv(url_goals)
+    # --- DASHBOARD LAYOUT ---
+    tab1, tab2 = st.tabs(["Daily Transactions", "Budget Planning"])
 
-    # --- TOP METRICS ---
-    st.subheader("Executive Summary")
-    total_spent = df_tx['Amount'].sum() if 'Amount' in df_tx.columns else 0
-    total_budget = df_goals['Goal'].sum() if 'Goal' in df_goals.columns else 0
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Budgeted", f"${total_budget:,.2f}")
-    m2.metric("Total Spent", f"${total_spent:,.2f}")
-    m3.metric("Remaining", f"${total_budget - total_spent:,.2f}")
-
-    st.divider()
-
-    # --- TWO COLUMN INPUT SECTION ---
-    col_input1, col_input2 = st.columns(2)
-
-    with col_input1:
-        st.subheader("💰 Input New Transaction")
-        with st.form("transaction_form", clear_on_submit=True):
-            date = st.date_input("Date")
-            desc = st.text_input("Description (e.g., Starbucks, Rent)")
-            amt = st.number_input("Amount ($)", min_value=0.0, step=0.01)
-            submitted_tx = st.form_submit_button("Log Transaction")
-            if submitted_tx:
-                st.info("To save this permanently, paste it into the 'Transactions' tab of your Google Sheet. (Direct writing requires a Private Key).")
-
-    with col_input2:
-        st.subheader("🎯 Set New Budget Goal")
-        with st.form("goal_form", clear_on_submit=True):
-            category = st.text_input("Category (e.g., Groceries)")
-            goal_val = st.number_input("Monthly Goal ($)", min_value=0.0, step=10.0)
-            submitted_goal = st.form_submit_button("Update Goal")
-            if submitted_goal:
-                st.info("To save this permanently, add it to the 'Goals' tab of your Google Sheet.")
-
-    st.divider()
-
-    # --- DATA TABLES VIEW ---
-    st.subheader("Current Financial Records")
-    view_col1, view_col2 = st.columns(2)
-    
-    with view_col1:
-        st.write("**Transactions Log**")
+    with tab1:
+        st.subheader("📝 Recent Spending")
         st.dataframe(df_tx, use_container_width=True, hide_index=True)
+        
+        with st.form("new_tx"):
+            st.write("**Log New Transaction**")
+            d = st.date_input("Date")
+            desc = st.text_input("Description")
+            amt = st.number_input("Amount", min_value=0.0)
+            if st.form_submit_button("Save to Google Sheets"):
+                new_row = pd.DataFrame([{"Date": str(d), "Description": desc, "Amount": amt}])
+                updated = pd.concat([df_tx, new_row], ignore_index=True)
+                conn.update(worksheet="Transactions", data=updated)
+                st.success("Transaction Logged!")
+                st.rerun()
 
-    with view_col2:
-        st.write("**Budget Targets**")
+    with tab2:
+        st.subheader("🎯 Monthly Goals")
         st.dataframe(df_goals, use_container_width=True, hide_index=True)
+        
+        with st.form("new_goal"):
+            st.write("**Set New Category Goal**")
+            cat = st.text_input("Category")
+            g_amt = st.number_input("Monthly Limit", min_value=0.0)
+            if st.form_submit_button("Update Goals"):
+                new_row = pd.DataFrame([{"Category": cat, "Goal": g_amt}])
+                updated = pd.concat([df_goals, new_row], ignore_index=True)
+                conn.update(worksheet="Goals", data=updated)
+                st.success("Goal Updated!")
+                st.rerun()
 
 except Exception as e:
-    st.error(f"Error loading dashboard: {e}")
+    st.error(f"Connection Error: {e}")
