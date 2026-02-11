@@ -7,25 +7,36 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Unified Handshake)
+# 2. INITIALIZE CONNECTION (The Nested Envelope Fix)
 try:
-    # 1. Get all secrets into a modifiable dictionary
-    conf = st.secrets["connections"]["gsheets"].to_dict()
+    # 1. Get all raw secrets
+    raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. Move 'spreadsheet_url' to 'spreadsheet' inside the dictionary
-    if "spreadsheet_url" in conf:
-        conf["spreadsheet"] = conf.pop("spreadsheet_url")
+    # 2. Extract the URL separately
+    target_url = raw_secrets.get("spreadsheet_url")
     
-    # 3. Remove 'type' to avoid the "multiple values" collision
-    conf.pop("type", None)
-    
-    # 4. Clean the private key line breaks
-    if "private_key" in conf:
-        conf["private_key"] = conf["private_key"].replace("\\n", "\n").strip()
+    # 3. Build the Google Service Account "Envelope"
+    # This keeps 'project_id' and others out of the main function call
+    sa_info = {
+        "type": "service_account",
+        "project_id": raw_secrets.get("project_id"),
+        "private_key_id": raw_secrets.get("private_key_id"),
+        "private_key": raw_secrets.get("private_key", "").replace("\\n", "\n").strip(),
+        "client_email": raw_secrets.get("client_email"),
+        "client_id": raw_secrets.get("client_id"),
+        "auth_uri": raw_secrets.get("auth_uri"),
+        "token_uri": raw_secrets.get("token_uri"),
+        "auth_provider_x509_cert_url": raw_secrets.get("auth_provider_x509_cert_url"),
+        "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
+    }
 
-    # 5. Connect! We unpack EVERYTHING into the function
-    # This sends 'spreadsheet', 'private_key', etc., as individual pieces.
-    conn = st.connection("gsheets", type=GSheetsConnection, **conf)
+    # 4. Connect! Using the two specific boxes the library recognizes.
+    conn = st.connection(
+        "gsheets", 
+        type=GSheetsConnection, 
+        spreadsheet_url=target_url, 
+        service_account_info=sa_info
+    )
     
 except Exception as e:
     st.error(f"Connection Error: {e}")
