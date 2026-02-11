@@ -12,7 +12,7 @@ try:
     # 1. Get raw secrets
     raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. THE RSA KEY CLEANER: Rebuilds to 64-char blocks
+    # 2. THE RSA KEY CLEANER: Rebuilds to 64-char blocks for Google's RSA Signer
     p_key = raw_secrets.get("private_key", "")
     header = "-----BEGIN PRIVATE KEY-----"
     footer = "-----END PRIVATE KEY-----"
@@ -23,7 +23,6 @@ try:
     formatted_key += footer
 
     # 3. BUILD THE SERVICE ACCOUNT INFO BUNDLE
-    # This keeps 'project_id', 'private_key', etc., inside one object
     sa_info = {
         "type": "service_account",
         "project_id": raw_secrets.get("project_id"),
@@ -37,11 +36,11 @@ try:
         "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
     }
 
-    # 4. Connect! Passing the URL and the Info Bundle
+    # 4. Connect! Using 'spreadsheet_url' instead of 'spreadsheet'
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet=raw_secrets.get("spreadsheet_url"),
+        spreadsheet_url=raw_secrets.get("spreadsheet_url"),
         service_account_info=sa_info
     )
     
