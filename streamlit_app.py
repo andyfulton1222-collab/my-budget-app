@@ -7,43 +7,11 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. THE CLEANER & BUNDLED CONNECTION
+# 2. THE SIMPLE CONNECTION
+# This tells the library: "Look at my Secrets box, find [connections.gsheets], 
+# and use those credentials to connect."
 try:
-    # 1. Get raw secrets
-    raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
-    
-    # 2. THE RSA KEY CLEANER: Rebuilds to 64-char blocks for Google's RSA Signer
-    p_key = raw_secrets.get("private_key", "")
-    header = "-----BEGIN PRIVATE KEY-----"
-    footer = "-----END PRIVATE KEY-----"
-    core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "").replace("\\n", "")
-    formatted_key = header + "\n"
-    for i in range(0, len(core_key), 64):
-        formatted_key += core_key[i:i+64] + "\n"
-    formatted_key += footer
-
-    # 3. BUILD THE SERVICE ACCOUNT INFO BUNDLE
-    sa_info = {
-        "type": "service_account",
-        "project_id": raw_secrets.get("project_id"),
-        "private_key_id": raw_secrets.get("private_key_id"),
-        "private_key": formatted_key,
-        "client_email": raw_secrets.get("client_email"),
-        "client_id": raw_secrets.get("client_id"),
-        "auth_uri": raw_secrets.get("auth_uri"),
-        "token_uri": raw_secrets.get("token_uri"),
-        "auth_provider_x509_cert_url": raw_secrets.get("auth_provider_x509_cert_url"),
-        "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
-    }
-
-    # 4. Connect! Using 'spreadsheet_url' instead of 'spreadsheet'
-    conn = st.connection(
-        "gsheets", 
-        type=GSheetsConnection, 
-        spreadsheet_url=raw_secrets.get("spreadsheet_url"),
-        service_account_info=sa_info
-    )
-    
+    conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
@@ -51,6 +19,7 @@ except Exception as e:
 # 3. LOAD DATA
 def load_data():
     try:
+        # We use 'spreadsheet' here because it pulls from the URL in your secrets
         transactions = conn.read(worksheet="Transactions")
         goals = conn.read(worksheet="Goals")
         return transactions, goals
