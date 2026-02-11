@@ -1,24 +1,33 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
-import os
 
-# 1. SETUP & DATA PERSISTENCE
-FILE_NAME = "transactions.csv"
-GOAL_FILE = "goals.csv"
-
-for f, cols in [(FILE_NAME, ["Date", "Category", "Amount", "Note"]), (GOAL_FILE, ["Category", "Goal"])]:
-    if not os.path.exists(f):
-        pd.DataFrame(columns=cols).to_csv(f, index=False)
-
+# 1. PAGE SETUP
 st.set_page_config(page_title="Executive Finance Tracker", layout="wide")
 
-# 2. DATA LOADING
-df = pd.read_csv(FILE_NAME)
-df['Date'] = pd.to_datetime(df['Date'])
-goals_df = pd.read_csv(GOAL_FILE)
+# 2. CONNECT TO GOOGLE SHEETS
+# This uses the [connections.gsheets] section from your Secrets
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. SIDEBAR - LOG EXPENSE (Now allows negatives)
+# Helper functions to fetch data from specific tabs
+def get_transactions():
+    try:
+        return conn.read(worksheet="Transactions", ttl="0s")
+    except:
+        return pd.DataFrame(columns=["Date", "Category", "Amount", "Note"])
+
+def get_goals():
+    try:
+        return conn.read(worksheet="Goals", ttl="0s")
+    except:
+        return pd.DataFrame(columns=["Category", "Goal"])
+
+# Load current data
+df = get_transactions()
+goals_df = get_goals()
+
+# 3. SIDEBAR - LOG TRANSACTION & SET GOALS
 with st.sidebar:
     st.header("⚙️ Settings & Entry")
     
@@ -26,58 +35,74 @@ with st.sidebar:
         new_cat = st.text_input("Category Name")
         new_goal = st.number_input("Monthly Goal ($)", min_value=0.0, step=50.0)
         if st.button("Set Goal"):
-            if new_cat in goals_df['Category'].values:
+            # If category exists, update it; otherwise, add it
+            if not goals_df.empty and new_cat in goals_df['Category'].values:
                 goals_df.loc[goals_df['Category'] == new_cat, 'Goal'] = new_goal
             else:
-                goals_df = pd.concat([goals_df, pd.DataFrame([{"Category": new_cat, "Goal": new_goal}])], ignore_index=True)
-            goals_df.to_csv(GOAL_FILE, index=False)
+                new_row = pd.DataFrame([{"Category": new_cat, "Goal": new_goal}])
+                goals_df = pd.concat([goals_df, new_row], ignore_index=True)
+            
+            conn.update(worksheet="Goals", data=goals_df)
+            st.success(f"Goal set for {new_cat}!")
             st.rerun()
 
     st.markdown("---")
     st.header("📝 Log Transaction")
-    categories = goals_df['Category'].tolist()
-    
-    if not categories:
-        st.warning("Add a category first!")
+    if goals_df.empty:
+        st.warning("Add a category goal first!")
     else:
+        categories = goals_df['Category'].tolist()
         with st.form("entry_form", clear_on_submit=True):
             date = st.date_input("Date", datetime.now())
             cat = st.selectbox("Category", categories)
-            # REMOVED min_value=0.0 to allow for negative return amounts
-            amt = st.number_input("Amount ($) - Use negative for returns", step=1.0)
+            # Allows negative numbers for returns
+            amt = st.number_input("Amount ($)", step=1.0)
             note = st.text_input("Note")
+            
             if st.form_submit_button("Save"):
-                pd.DataFrame([[date, cat, amt, note]], columns=["Date", "Category", "Amount", "Note"]).to_csv(FILE_NAME, mode='a', header=False, index=False)
+                new_entry = pd.DataFrame([[date.strftime('%Y-%m-%d'), cat, amt, note]], 
+                                         columns=["Date", "Category", "Amount", "Note"])
+                # Append to existing data
+                updated_df = pd.concat([df, new_entry], ignore_index=True)
+                conn.update(worksheet="Transactions", data=updated_df)
+                st.success("Saved to Google Sheets!")
                 st.rerun()
 
-# 4. MAIN DASHBOARD - MONTH SELECTOR
+# 4. MAIN DASHBOARD
 st.title("📊 Executive Finance Summary")
 
 if not df.empty:
+    # Ensure Date is actually a datetime object for filtering
+    df['Date'] = pd.to_datetime(df['Date'])
     df['Month_Year'] = df['Date'].dt.strftime('%B %Y')
+    
+    # Month Selector
     available_months = sorted(df['Month_Year'].unique().tolist(), reverse=True)
     current_mo_str = datetime.now().strftime('%B %Y')
-    if current_mo_str not in available_months: available_months.insert(0, current_mo_str)
+    if current_mo_str not in available_months: 
+        available_months.insert(0, current_mo_str)
+    
     selected_month = st.selectbox("Select View Month", available_months)
     view_df = df[df['Month_Year'] == selected_month]
 else:
     selected_month = datetime.now().strftime('%B %Y')
     view_df = pd.DataFrame()
 
-# 5. DISPLAY METRICS & TABLE
+# 5. DISPLAY METRICS
 if not goals_df.empty:
     total_goal = goals_df['Goal'].sum()
     total_spent = view_df['Amount'].sum() if not view_df.empty else 0
-    remaining_total = total_goal - total_spent
+    remaining = total_goal - total_spent
     
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Budget", f"${total_goal:,.2f}")
     c2.metric("Total Spent", f"${total_spent:,.2f}")
-    c3.metric("Remaining", f"${remaining_total:,.2f}", delta=f"{remaining_total:,.2f}")
+    c3.metric("Remaining", f"${remaining:,.2f}", delta=f"{remaining:,.2f}")
 
     st.markdown("---")
     st.subheader(f"Breakdown: {selected_month}")
     
+    # Display the Category List with Green/Red status
     for _, row in goals_df.iterrows():
         cat, goal = row['Category'], row['Goal']
         spent = view_df[view_df['Category'] == cat]['Amount'].sum() if not view_df.empty else 0
@@ -89,36 +114,22 @@ if not goals_df.empty:
         r2.write(f"${goal:,.2f}")
         r3.write(f"${spent:,.2f}")
         r4.markdown(f":{color}[**{'+' if diff >= 0 else ''}{diff:,.2f}**]")
+else:
+    st.info("Start by adding categories and goals in the sidebar!")
 
-# 6. EDIT/DELETE SECTION
+# 6. DATA MANAGEMENT
 st.markdown("---")
-with st.expander("🛠️ Edit or Delete Transactions"):
+with st.expander("🛠️ Admin Tools"):
+    if st.button("Clear Cache / Refresh Data"):
+        st.cache_data.clear()
+        st.rerun()
+    
     if not df.empty:
-        df_display = df.copy()
-        df_display['ID'] = df_display.index
-        # Create a label for the dropdown
-        df_display['Selector'] = df_display['Date'].dt.strftime('%Y-%m-%d') + " | " + df_display['Category'] + " | $" + df_display['Amount'].astype(str)
-        
-        to_edit = st.selectbox("Select transaction to modify", df_display['ID'], format_func=lambda x: df_display.loc[x, 'Selector'])
-        
-        col_ed1, col_ed2 = st.columns(2)
-        with col_ed1:
-            new_date = st.date_input("Edit Date", df.loc[to_edit, 'Date'])
-            new_cat = st.selectbox("Edit Category", categories, index=categories.index(df.loc[to_edit, 'Category']))
-        with col_ed2:
-            new_amt = st.number_input("Edit Amount", value=float(df.loc[to_edit, 'Amount']))
-            new_note = st.text_input("Edit Note", df.loc[to_edit, 'Note'])
-        
-        btn1, btn2, _ = st.columns([1, 1, 4])
-        if btn1.button("Update Entry"):
-            df.loc[to_edit, ['Date', 'Category', 'Amount', 'Note']] = [pd.to_datetime(new_date), new_cat, new_amt, new_note]
-            df.drop(columns=['Month_Year'], errors='ignore').to_csv(FILE_NAME, index=False)
-            st.success("Updated!")
+        if st.button("Delete Most Recent Entry", type="primary"):
+            updated_df = df.iloc[:-1]
+            # Remove helper column before saving back to Sheets
+            if 'Month_Year' in updated_df.columns:
+                updated_df = updated_df.drop(columns=['Month_Year'])
+            conn.update(worksheet="Transactions", data=updated_df)
+            st.warning("Last entry deleted!")
             st.rerun()
-        if btn2.button("Delete Entry", type="primary"):
-            df = df.drop(to_edit)
-            df.drop(columns=['Month_Year'], errors='ignore').to_csv(FILE_NAME, index=False)
-            st.warning("Deleted!")
-            st.rerun()
-    else:
-        st.write("No transactions to edit.")
