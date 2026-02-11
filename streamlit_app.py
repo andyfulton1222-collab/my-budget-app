@@ -5,44 +5,28 @@ import pandas as pd
 st.set_page_config(page_title="Executive Budget", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 1. Try to connect using the "spreadsheet" secret
 try:
-    # We tell Streamlit exactly where to look
+    # Connect
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # 2. Load the data
-    # Note: Ensure your Google Sheet tabs are named "Goals" and "Transactions"
-    df_goals = conn.read(worksheet="Goals")
-    df_tx = conn.read(worksheet="Transactions")
+    # Read - We use a slightly different method to catch 404 errors
+    df_goals = conn.read(worksheet="Goals", ttl=0) # ttl=0 ensures it doesn't use old, broken data
+    df_tx = conn.read(worksheet="Transactions", ttl=0)
     
-    st.success("✅ Dashboard Connected!")
+    st.success("✅ Connected to Google Sheets!")
 
-    # --- THE VIEW ---
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("Budget Goals")
         st.dataframe(df_goals, use_container_width=True, hide_index=True)
-
     with col2:
         st.subheader("Recent Transactions")
         st.dataframe(df_tx, use_container_width=True, hide_index=True)
 
-    # --- ADD DATA ---
-    st.divider()
-    with st.expander("➕ Add New Budget Goal"):
-        with st.form("new_goal"):
-            cat = st.text_input("Category")
-            amt = st.number_input("Goal Amount", min_value=0)
-            if st.form_submit_button("Save to Google Sheets"):
-                if cat:
-                    new_data = pd.DataFrame([{"Category": cat, "Goal": amt}])
-                    updated_df = pd.concat([df_goals, new_data], ignore_index=True)
-                    conn.update(worksheet="Goals", data=updated_df)
-                    st.success("Saved!")
-                    st.rerun()
-
 except Exception as e:
-    st.error("⚠️ Connection Secret Missing")
-    st.write("Go to Secrets and ensure the line starts with **spreadsheet =**")
-    st.info(f"Technical details: {e}")
+    st.error("⚠️ Almost there! We have a '404' or Permission issue.")
+    st.write("1. Open your Sheet and click **Share**.")
+    st.write("2. Make sure it says **'Anyone with the link'** and **'Editor'**.")
+    st.write("3. Ensure your Secrets link ends right after the long ID string.")
+    st.divider()
+    st.error(f"Technical Detail: {e}")
