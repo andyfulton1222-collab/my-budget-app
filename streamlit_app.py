@@ -7,22 +7,28 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Surgical Conflict Resolution)
+# 2. INITIALIZE CONNECTION (The Final Precision Handshake)
 try:
     # Get secrets and convert to a dictionary
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # RESOLVE THE CONFLICT:
-    # We remove 'type' from the dictionary because st.connection already 
-    # uses the 'type' argument for GSheetsConnection.
+    # 1. Pull out the Spreadsheet URL (The library wants it named 'spreadsheet')
+    target_url = conf.pop("spreadsheet_url", None)
+    
+    # 2. Pull out the 'type' to avoid the "multiple values" error
     conf.pop("type", None)
     
-    # Fix the private key line breaks
+    # 3. Fix the private key line breaks
     if "private_key" in conf:
         conf["private_key"] = conf["private_key"].replace("\\n", "\n")
     
-    # Connect using the cleaned dictionary
-    conn = st.connection("gsheets", type=GSheetsConnection, **conf)
+    # 4. Connect! Hand the URL to 'spreadsheet' and everything else to 'service_account'
+    conn = st.connection(
+        "gsheets", 
+        type=GSheetsConnection, 
+        spreadsheet=target_url, 
+        service_account=conf
+    )
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
