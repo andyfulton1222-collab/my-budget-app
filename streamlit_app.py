@@ -7,13 +7,11 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Streamlit-Native Fix)
+# 2. INITIALIZE CONNECTION (The Hands-Off Fix)
 try:
-    # We don't build dictionaries or rename anything. 
-    # We tell Streamlit: "Look at the [connections.gsheets] section in my secrets and connect."
-    # The library will automatically map 'spreadsheet_url', 'private_key', etc.
+    # We use the most direct connection possible.
+    # This relies on the Secrets being perfectly formatted in the Streamlit UI.
     conn = st.connection("gsheets", type=GSheetsConnection)
-    
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
@@ -21,12 +19,10 @@ except Exception as e:
 # 3. LOAD DATA
 def load_data():
     try:
-        # Pulling data from the named tabs in your Google Sheet
         transactions = conn.read(worksheet="Transactions")
         goals = conn.read(worksheet="Goals")
         return transactions, goals
     except Exception:
-        # Fallback to empty DataFrames if the sheet is new
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -58,8 +54,10 @@ with st.sidebar:
             goal_val = st.number_input("Monthly Budget Goal", min_value=0.0)
             
             if st.form_submit_button("Save Goal"):
-                new_goal = pd.DataFrame([{"Category": new_cat, "Monthly Goal": goal_val}])
+                # Ensure values are clean
+                new_goal = pd.DataFrame([{"Category": str(new_cat), "Monthly Goal": float(goal_val)}])
                 updated_goals = pd.concat([df_goals, new_goal], ignore_index=True)
+                # Attempting to write back to the sheet
                 conn.update(worksheet="Goals", data=updated_goals)
                 st.success("Goal Saved!")
                 st.rerun()
@@ -82,7 +80,8 @@ if not df_goals.empty:
             delta_color=color
         )
     
-    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], barmode='group', title="Monthly Spending vs. Goals")
+    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], 
+                 barmode='group', title="Monthly Spending vs. Goals")
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Start by adding your first Budget Goal in the sidebar!")
