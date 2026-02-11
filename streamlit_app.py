@@ -2,32 +2,17 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
-import json
 
 # 1. APP SETUP
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The JSON Bypass)
+# 2. INITIALIZE CONNECTION
+# Streamlit will now automatically find the keys in your [connections.gsheets] section
 try:
-    if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-        # Get the string and strip hidden whitespace
-        json_string = st.secrets["connections"]["gsheets"]["service_account_json"].strip()
-        
-        # Double-check that newlines are correctly interpreted
-        json_string = json_string.replace("\\\\n", "\\n")
-        
-        # Convert string to dictionary
-        service_account_info = json.loads(json_string)
-        
-        # Connect!
-        conn = st.connection("gsheets", type=GSheetsConnection, service_account=service_account_info)
-    else:
-        st.error("Secrets configuration missing in Streamlit Cloud!")
-        st.stop()
+    conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error(f"Authentication Error: {e}")
-    st.info("Check your Secrets formatting. Ensure it starts with '''{ and ends with }'''")
+    st.error(f"Connection Error: {e}")
     st.stop()
 
 # 3. LOAD DATA
@@ -37,7 +22,6 @@ def load_data():
         goals = conn.read(worksheet="Goals")
         return transactions, goals
     except Exception:
-        # Fallback if sheets are empty
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -51,7 +35,6 @@ with st.sidebar:
     with tab1:
         with st.form("add_transaction"):
             date = st.date_input("Date")
-            # Categories pull from the Goals sheet
             cat_list = df_goals['Category'].unique().tolist() if not df_goals.empty else ["General"]
             category = st.selectbox("Category", options=cat_list)
             amount = st.number_input("Amount", min_value=0.0, step=0.01)
@@ -78,13 +61,11 @@ with st.sidebar:
 
 # 5. MAIN DASHBOARD
 if not df_goals.empty:
-    # Calculation Logic
     df_tx['Amount'] = pd.to_numeric(df_tx['Amount'], errors='coerce').fillna(0)
     spend_summary = df_tx.groupby('Category')['Amount'].sum().reset_index()
     comparison = pd.merge(df_goals, spend_summary, on='Category', how='left').fillna(0)
     comparison['Remaining'] = comparison['Monthly Goal'] - comparison['Amount']
     
-    # KPIs
     cols = st.columns(min(len(comparison), 4))
     for i, row in comparison.iterrows():
         col_idx = i % 4
@@ -96,10 +77,8 @@ if not df_goals.empty:
             delta_color=color
         )
     
-    # Chart
     fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], 
-                 barmode='group', title="Spending vs. Goals",
-                 color_discrete_map={"Amount": "#EF553B", "Monthly Goal": "#636EFA"})
+                 barmode='group', title="Spending vs. Goals")
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Start by adding a Budget Goal in the sidebar!")
