@@ -7,11 +7,21 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Surgical Fix)
+# 2. INITIALIZE CONNECTION (The Conflict Resolver)
 try:
+    # Pull secrets into a modifiable dictionary
     secret_dict = st.secrets["connections"]["gsheets"].to_dict()
+    
+    # RESOLVE THE CONFLICT: Remove 'type' from the dictionary 
+    # because st.connection already knows it is a 'gsheets' type.
+    if "type" in secret_dict:
+        del secret_dict["type"]
+    
+    # Fix the private key line breaks
     if "private_key" in secret_dict:
         secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
+
+    # Connect!
     conn = st.connection("gsheets", type=GSheetsConnection, **secret_dict)
 except Exception as e:
     st.error(f"Connection Error: {e}")
