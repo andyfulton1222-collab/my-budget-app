@@ -12,11 +12,13 @@ try:
     # 1. Create a modifiable COPY of the secrets
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. RESOLVE CONFLICT: Remove the 'type' key from the dict 
-    # so it doesn't clash with the 'type' argument in st.connection
+    # 2. RESOLVE DUPLICATE CONFLICTS:
+    # We pull the URL out and then DELETE it from the dict so it isn't passed twice.
+    target_url = conf.pop("spreadsheet_url", None)
+    # We also ensure 'type' is gone to avoid the previous error.
     conf.pop("type", None)
     
-    # 3. THE RSA KEY CLEANER
+    # 3. THE RSA KEY CLEANER: Rebuilds to 64-char blocks
     if "private_key" in conf:
         p_key = conf["private_key"]
         header = "-----BEGIN PRIVATE KEY-----"
@@ -28,11 +30,11 @@ try:
         formatted_key += footer
         conf["private_key"] = formatted_key
 
-    # 4. Connect using 'spreadsheet_url' as the label
+    # 4. Connect! Passing the URL once and the cleaned dict for the rest.
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet_url=conf.get("spreadsheet_url"),
+        spreadsheet_url=target_url,
         **conf
     )
     
