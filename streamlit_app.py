@@ -7,24 +7,24 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Surgical Conflict Resolution)
+# 2. INITIALIZE CONNECTION (The Unified Handshake)
 try:
-    # Get all secrets into a modifiable dictionary
+    # 1. Get all secrets into a modifiable dictionary
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # RESOLVE THE CONFLICT:
-    # We remove 'type' from the dictionary because st.connection already 
-    # uses the 'type' argument for GSheetsConnection.
+    # 2. Move 'spreadsheet_url' to 'spreadsheet' inside the dictionary
+    if "spreadsheet_url" in conf:
+        conf["spreadsheet"] = conf.pop("spreadsheet_url")
+    
+    # 3. Remove 'type' to avoid the "multiple values" collision
     conf.pop("type", None)
     
-    # Fix the private key line breaks (the Manual Reconstructor)
+    # 4. Clean the private key line breaks
     if "private_key" in conf:
-        raw_key = conf["private_key"]
-        # This handles both literal \n and ensures physical breaks are preserved
-        clean_key = raw_key.replace("\\n", "\n").strip()
-        conf["private_key"] = clean_key
+        conf["private_key"] = conf["private_key"].replace("\\n", "\n").strip()
 
-    # Connect! Now there is only ONE 'type' being passed.
+    # 5. Connect! We unpack EVERYTHING into the function
+    # This sends 'spreadsheet', 'private_key', etc., as individual pieces.
     conn = st.connection("gsheets", type=GSheetsConnection, **conf)
     
 except Exception as e:
