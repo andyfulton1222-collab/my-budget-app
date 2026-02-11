@@ -7,12 +7,14 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. THE CLEANER & AUTOMATED CONNECTION
+# 2. THE CLEANER & MANUAL CONFIG
 try:
-    # We modify the secrets in-memory for the duration of this session
-    # This ensures the 'private_key' is formatted correctly for Google's RSA reader
-    if "private_key" in st.secrets["connections"]["gsheets"]:
-        p_key = st.secrets["connections"]["gsheets"]["private_key"]
+    # 1. Create a modifiable COPY of the secrets
+    conf = st.secrets["connections"]["gsheets"].to_dict()
+    
+    # 2. THE RSA KEY CLEANER: Rebuilds the key to PEM standards
+    if "private_key" in conf:
+        p_key = conf["private_key"]
         header = "-----BEGIN PRIVATE KEY-----"
         footer = "-----END PRIVATE KEY-----"
         
@@ -23,12 +25,16 @@ try:
             formatted_key += core_key[i:i+64] + "\n"
         formatted_key += footer
         
-        # Inject the cleaned key back into the secrets for the connection to find
-        st.secrets["connections"]["gsheets"]["private_key"] = formatted_key
+        conf["private_key"] = formatted_key
 
-    # We use the simplest connection call. 
-    # It will automatically pull 'spreadsheet_url' and the cleaned 'private_key'
-    conn = st.connection("gsheets", type=GSheetsConnection)
+    # 3. Connect using the cleaned dictionary as a configuration
+    # We use 'spreadsheet' because that is the most common internal label for this library
+    conn = st.connection(
+        "gsheets", 
+        type=GSheetsConnection, 
+        spreadsheet=conf.get("spreadsheet_url"), # Maps the URL correctly
+        **conf
+    )
     
 except Exception as e:
     st.error(f"Connection Error: {e}")
