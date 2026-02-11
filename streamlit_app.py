@@ -7,29 +7,28 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Unified Handshake)
+# 2. INITIALIZE CONNECTION (The Direct Unpacking Fix)
 try:
-    # Get secrets into a dictionary
+    # Get all secrets into one dictionary
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 1. Rename 'spreadsheet_url' to 'spreadsheet' inside the dict
+    # RESOLVE THE CONFLICTS:
+    # 1. The library wants 'spreadsheet', not 'spreadsheet_url'
     if "spreadsheet_url" in conf:
         conf["spreadsheet"] = conf.pop("spreadsheet_url")
     
-    # 2. Remove 'type' to avoid the "multiple values" error
+    # 2. Remove 'type' because it conflicts with Streamlit's internal connection type
     conf.pop("type", None)
     
     # 3. Fix the private key line breaks
     if "private_key" in conf:
         conf["private_key"] = conf["private_key"].replace("\\n", "\n")
     
-    # 4. Connect! Passing the entire dict as the service account info
-    # This lets the library find 'spreadsheet' inside the credentials
-    conn = st.connection(
-        "gsheets", 
-        type=GSheetsConnection, 
-        service_account=conf
-    )
+    # 4. Connect! We "unpack" the dictionary using **
+    # This sends every single key (project_id, private_key, spreadsheet, etc.) 
+    # as its own separate argument to the connection.
+    conn = st.connection("gsheets", type=GSheetsConnection, **conf)
+    
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
