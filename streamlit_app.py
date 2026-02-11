@@ -7,36 +7,42 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. THE CLEANER & UNIFIED CONNECTION
+# 2. THE CLEANER & BUNDLED CONNECTION
 try:
-    # 1. Create a modifiable COPY of the secrets
-    conf = st.secrets["connections"]["gsheets"].to_dict()
+    # 1. Get raw secrets
+    raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. TRANSLATION: Move 'spreadsheet_url' to 'spreadsheet' inside the dict
-    # This satisfies the internal engine without using an external argument.
-    if "spreadsheet_url" in conf:
-        conf["spreadsheet"] = conf.pop("spreadsheet_url")
-    
-    # 3. Remove 'type' to avoid the "multiple values" collision
-    conf.pop("type", None)
-    
-    # 4. THE RSA KEY CLEANER: Rebuilds to 64-char blocks
-    if "private_key" in conf:
-        p_key = conf["private_key"]
-        header = "-----BEGIN PRIVATE KEY-----"
-        footer = "-----END PRIVATE KEY-----"
-        core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "").replace("\\n", "")
-        formatted_key = header + "\n"
-        for i in range(0, len(core_key), 64):
-            formatted_key += core_key[i:i+64] + "\n"
-        formatted_key += footer
-        conf["private_key"] = formatted_key
+    # 2. THE RSA KEY CLEANER: Rebuilds to 64-char blocks
+    p_key = raw_secrets.get("private_key", "")
+    header = "-----BEGIN PRIVATE KEY-----"
+    footer = "-----END PRIVATE KEY-----"
+    core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "").replace("\\n", "")
+    formatted_key = header + "\n"
+    for i in range(0, len(core_key), 64):
+        formatted_key += core_key[i:i+64] + "\n"
+    formatted_key += footer
 
-    # 5. Connect! Everything is now inside the **conf "box"
+    # 3. BUILD THE SERVICE ACCOUNT INFO BUNDLE
+    # This keeps 'project_id', 'private_key', etc., inside one object
+    sa_info = {
+        "type": "service_account",
+        "project_id": raw_secrets.get("project_id"),
+        "private_key_id": raw_secrets.get("private_key_id"),
+        "private_key": formatted_key,
+        "client_email": raw_secrets.get("client_email"),
+        "client_id": raw_secrets.get("client_id"),
+        "auth_uri": raw_secrets.get("auth_uri"),
+        "token_uri": raw_secrets.get("token_uri"),
+        "auth_provider_x509_cert_url": raw_secrets.get("auth_provider_x509_cert_url"),
+        "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
+    }
+
+    # 4. Connect! Passing the URL and the Info Bundle
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        **conf
+        spreadsheet=raw_secrets.get("spreadsheet_url"),
+        service_account_info=sa_info
     )
     
 except Exception as e:
