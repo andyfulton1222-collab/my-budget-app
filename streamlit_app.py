@@ -7,38 +7,29 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. THE CLEANER & CONNECTION
+# 2. THE CLEANER & AUTOMATED CONNECTION
 try:
-    # 1. Pull secrets into a modifiable dictionary
-    conf = st.secrets["connections"]["gsheets"].to_dict()
-    
-    # 2. THE RSA KEY FIX: This reformats the key into the 64-character blocks Google requires
-    if "private_key" in conf:
-        p_key = conf["private_key"]
-        # Remove existing headers/footers and any accidental whitespace
+    # We modify the secrets in-memory for the duration of this session
+    # This ensures the 'private_key' is formatted correctly for Google's RSA reader
+    if "private_key" in st.secrets["connections"]["gsheets"]:
+        p_key = st.secrets["connections"]["gsheets"]["private_key"]
         header = "-----BEGIN PRIVATE KEY-----"
         footer = "-----END PRIVATE KEY-----"
-        core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "")
         
-        # Rebuild the key with a physical line break every 64 characters
+        # Strip everything and rebuild the 64-character block format
+        core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "").replace("\\n", "")
         formatted_key = header + "\n"
         for i in range(0, len(core_key), 64):
             formatted_key += core_key[i:i+64] + "\n"
         formatted_key += footer
         
-        conf["private_key"] = formatted_key
+        # Inject the cleaned key back into the secrets for the connection to find
+        st.secrets["connections"]["gsheets"]["private_key"] = formatted_key
 
-    # 3. Connect using the cleaned config
-    # We remove 'spreadsheet_url' from the 'sa_info' chunk so it doesn't cause a conflict
-    target_url = conf.pop("spreadsheet_url", None)
-    conf.pop("type", None) # Remove Google's 'type' to avoid Streamlit conflict
+    # We use the simplest connection call. 
+    # It will automatically pull 'spreadsheet_url' and the cleaned 'private_key'
+    conn = st.connection("gsheets", type=GSheetsConnection)
     
-    conn = st.connection(
-        "gsheets", 
-        type=GSheetsConnection, 
-        spreadsheet=target_url,
-        **conf
-    )
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
