@@ -7,20 +7,19 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Nested Envelope Fix)
+# 2. INITIALIZE CONNECTION (The Precision Handshake)
 try:
     # Get all secrets
     raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 1. Extract the URL separately
+    # 1. Extract the URL (Streamlit usually wants 'spreadsheet_url')
     target_url = raw_secrets.get("spreadsheet_url")
     
-    # 2. Fix the private key line breaks
+    # 2. Fix the private key line breaks for Google's RSA requirements
     if "private_key" in raw_secrets:
         raw_secrets["private_key"] = raw_secrets["private_key"].replace("\\n", "\n")
     
-    # 3. Put all Google-specific fields into a nested dictionary
-    # This is the "envelope" the library actually wants
+    # 3. Build the Google Service Account "Envelope"
     sa_info = {
         "type": "service_account",
         "project_id": raw_secrets.get("project_id"),
@@ -34,11 +33,11 @@ try:
         "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
     }
 
-    # 4. Connect using the proper keyword arguments
+    # 4. Connect! Using 'spreadsheet_url' as the designated keyword
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet=target_url, 
+        spreadsheet_url=target_url, 
         service_account_info=sa_info
     )
     
@@ -49,10 +48,12 @@ except Exception as e:
 # 3. LOAD DATA
 def load_data():
     try:
+        # Pulling data from the named tabs in your Google Sheet
         transactions = conn.read(worksheet="Transactions")
         goals = conn.read(worksheet="Goals")
         return transactions, goals
     except Exception:
+        # Create empty dataframes if the sheet hasn't been set up yet
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -101,7 +102,12 @@ if not df_goals.empty:
     for i, row in comparison.iterrows():
         col_idx = i % 4
         color = "normal" if row['Remaining'] >= 0 else "inverse"
-        cols[col_idx].metric(label=row['Category'], value=f"${row['Amount']:,.2f}", delta=f"${row['Remaining']:,.2f} Left", delta_color=color)
+        cols[col_idx].metric(
+            label=row['Category'], 
+            value=f"${row['Amount']:,.2f}", 
+            delta=f"${row['Remaining']:,.2f} Left", 
+            delta_color=color
+        )
     
     fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], barmode='group', title="Monthly Spending vs. Goals")
     st.plotly_chart(fig, use_container_width=True)
