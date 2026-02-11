@@ -5,34 +5,31 @@ st.set_page_config(page_title="Executive Budget", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
 try:
-    # 1. Grab the raw link from secrets
-    raw_url = st.secrets["spreadsheet"]
+    # 1. Grab the ID directly from secrets
+    sheet_id = st.secrets["spreadsheet_id"]
     
-    # 2. Extract just the ID part (the "ID" is the magic key Google needs)
-    # This logic finds the part between /d/ and /edit
-    spreadsheet_id = raw_url.split('/d/')[1].split('/')[0]
-    
-    # 3. Build perfect download links for your specific tabs
-    url_tx = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?tqx=out:csv&sheet=Transactions"
-    url_goals = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?tqx=out:csv&sheet=Goals"
+    # 2. These links are built specifically for your "Transactions" and "Goals" tabs
+    url_tx = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Transactions"
+    url_goals = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Goals"
 
-    # 4. Load the data
+    # 3. Read the data
     df_tx = pd.read_csv(url_tx)
     df_goals = pd.read_csv(url_goals)
 
-    st.success("✅ CONNECTION SUCCESSFUL!")
+    st.success("✅ CONNECTION ESTABLISHED!")
 
-    # --- DISPLAY ---
+    # --- DISPLAY TABLES ---
     col1, col2 = st.columns(2)
+    
     with col1:
-        st.subheader("📝 Transactions (Tab 1)")
-        st.dataframe(df_tx, use_container_width=True)
+        st.subheader("📝 Recent Transactions")
+        st.dataframe(df_tx, use_container_width=True, hide_index=True)
+
     with col2:
-        st.subheader("🎯 Budget Goals (Tab 2)")
-        st.dataframe(df_goals, use_container_width=True)
+        st.subheader("🎯 Budget Goals")
+        st.dataframe(df_goals, use_container_width=True, hide_index=True)
 
 except Exception as e:
     st.error("⚠️ Connection Error")
-    st.write("Double-check your Google Sheet tab names are exactly: **Transactions** and **Goals**")
-    st.info("Make sure the sheet is shared: 'Anyone with the link' can 'Editor'")
-    st.error(f"Technical Detail: {e}")
+    st.info("Make sure your Google Sheet tabs are named 'Transactions' and 'Goals' exactly.")
+    st.error(f"Error details: {e}")
