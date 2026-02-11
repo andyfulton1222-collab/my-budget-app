@@ -7,11 +7,38 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The "Automated" Fix)
+# 2. THE CLEANER & CONNECTION
 try:
-    # We pass NO extra arguments. 
-    # The library will automatically look for [connections.gsheets] in your Secrets.
-    conn = st.connection("gsheets", type=GSheetsConnection)
+    # 1. Pull secrets into a modifiable dictionary
+    conf = st.secrets["connections"]["gsheets"].to_dict()
+    
+    # 2. THE RSA KEY FIX: This reformats the key into the 64-character blocks Google requires
+    if "private_key" in conf:
+        p_key = conf["private_key"]
+        # Remove existing headers/footers and any accidental whitespace
+        header = "-----BEGIN PRIVATE KEY-----"
+        footer = "-----END PRIVATE KEY-----"
+        core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "")
+        
+        # Rebuild the key with a physical line break every 64 characters
+        formatted_key = header + "\n"
+        for i in range(0, len(core_key), 64):
+            formatted_key += core_key[i:i+64] + "\n"
+        formatted_key += footer
+        
+        conf["private_key"] = formatted_key
+
+    # 3. Connect using the cleaned config
+    # We remove 'spreadsheet_url' from the 'sa_info' chunk so it doesn't cause a conflict
+    target_url = conf.pop("spreadsheet_url", None)
+    conf.pop("type", None) # Remove Google's 'type' to avoid Streamlit conflict
+    
+    conn = st.connection(
+        "gsheets", 
+        type=GSheetsConnection, 
+        spreadsheet=target_url,
+        **conf
+    )
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
