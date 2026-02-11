@@ -3,19 +3,28 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
 
-# 1. THE HANDSHAKE FIX
-# This converts the text "\n" from your Secrets into real line breaks for Google
+# 1. THE HANDSHAKE FIX (Read-Only Compatible)
+# We create a new dictionary to hold the corrected credentials
 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-    if "private_key" in st.secrets["connections"]["gsheets"]:
-        raw_key = st.secrets["connections"]["gsheets"]["private_key"]
-        st.secrets["connections"]["gsheets"]["private_key"] = raw_key.replace("\\n", "\n")
+    secret_data = st.secrets["connections"]["gsheets"].to_dict()
+    if "private_key" in secret_data:
+        # We fix the key in our temporary copy, not the vault itself
+        secret_data["private_key"] = secret_data["private_key"].replace("\\n", "\n")
+    
+    # We tell the connection to use our fixed version
+    ttl = 600
+else:
+    secret_data = None
 
 # 2. APP SETUP
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# Initialize Connection
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Initialize Connection using our corrected secret data
+if secret_data:
+    conn = st.connection("gsheets", type=GSheetsConnection, **secret_data)
+else:
+    conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 3. LOAD DATA
 def load_data():
@@ -24,7 +33,6 @@ def load_data():
         goals = conn.read(worksheet="Goals")
         return transactions, goals
     except Exception:
-        # Create empty DataFrames if sheets are new/empty
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -39,7 +47,6 @@ with st.sidebar:
     with tab1:
         with st.form("add_transaction"):
             date = st.date_input("Date")
-            # Pull categories from goals sheet
             categories = df_goals['Category'].unique().tolist() if not df_goals.empty else ["General"]
             category = st.selectbox("Category", options=categories)
             amount = st.number_input("Amount", min_value=0.0, step=0.01)
@@ -66,14 +73,10 @@ with st.sidebar:
 
 # 5. MAIN DASHBOARD
 if not df_goals.empty:
-    # Summarize spending
     spend_summary = df_tx.groupby('Category')['Amount'].sum().reset_index()
-    
-    # Merge with goals
     comparison = pd.merge(df_goals, spend_summary, on='Category', how='left').fillna(0)
     comparison['Remaining'] = comparison['Monthly Goal'] - comparison['Amount']
     
-    # Metrics
     cols = st.columns(len(comparison))
     for i, row in comparison.iterrows():
         color = "normal" if row['Remaining'] >= 0 else "inverse"
@@ -84,7 +87,6 @@ if not df_goals.empty:
             delta_color=color
         )
     
-    # Chart
     fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], 
                  barmode='group', title="Spending vs. Goals")
     st.plotly_chart(fig, use_container_width=True)
