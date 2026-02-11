@@ -8,16 +8,10 @@ st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
 # 2. INITIALIZE CONNECTION (The Surgical Fix)
-# We manually clean the private key to prevent the PEM format error
 try:
-    # Pull secrets into a modifiable dictionary
     secret_dict = st.secrets["connections"]["gsheets"].to_dict()
-    
     if "private_key" in secret_dict:
-        # Replace the literal text "\n" with actual line breaks
         secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
-
-    # Connect using the surgically fixed credentials
     conn = st.connection("gsheets", type=GSheetsConnection, **secret_dict)
 except Exception as e:
     st.error(f"Connection Error: {e}")
@@ -30,7 +24,6 @@ def load_data():
         goals = conn.read(worksheet="Goals")
         return transactions, goals
     except Exception:
-        # Fallback if the Google Sheet is empty or missing headers
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -44,7 +37,6 @@ with st.sidebar:
     with tab1:
         with st.form("add_transaction"):
             date = st.date_input("Date")
-            # Pull categories dynamically from the Goals sheet
             cat_list = df_goals['Category'].unique().tolist() if not df_goals.empty else ["General"]
             category = st.selectbox("Category", options=cat_list)
             amount = st.number_input("Amount", min_value=0.0, step=0.01)
@@ -71,15 +63,11 @@ with st.sidebar:
 
 # 5. MAIN DASHBOARD
 if not df_goals.empty:
-    # Clean up amount data for math
     df_tx['Amount'] = pd.to_numeric(df_tx['Amount'], errors='coerce').fillna(0)
-    
-    # Calculate spending vs goals
     spend_summary = df_tx.groupby('Category')['Amount'].sum().reset_index()
     comparison = pd.merge(df_goals, spend_summary, on='Category', how='left').fillna(0)
     comparison['Remaining'] = comparison['Monthly Goal'] - comparison['Amount']
     
-    # Key Performance Indicators (Metrics)
     cols = st.columns(min(len(comparison), 4))
     for i, row in comparison.iterrows():
         col_idx = i % 4
@@ -91,5 +79,12 @@ if not df_goals.empty:
             delta_color=color
         )
     
-    # Visual Analytics
-    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'],
+    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], 
+                 barmode='group', title="Monthly Spending vs. Goals")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Start by adding your first Budget Goal in the sidebar!")
+
+st.divider()
+st.subheader("Recent Transactions")
+st.dataframe(df_tx.sort_values(by="Date", ascending=False), use_container_width=True)
