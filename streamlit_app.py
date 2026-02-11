@@ -10,16 +10,13 @@ st.title("📊 Executive Budget Dashboard")
 # 2. THE FAIL-SAFE CONNECTION ENGINE
 try:
     # A. Pull secrets into a modifiable dictionary
-    # This prevents the "Secrets does not support item assignment" error
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
     # B. THE RSA KEY CLEANER
-    # This ensures the private key is properly formatted even if the Secrets box messes it up
     if "private_key" in conf:
         p_key = conf["private_key"]
         header = "-----BEGIN PRIVATE KEY-----"
         footer = "-----END PRIVATE KEY-----"
-        # Strip everything and rebuild the 64-character block format Google requires
         core_key = p_key.replace(header, "").replace(footer, "").strip().replace(" ", "").replace("\n", "").replace("\\n", "")
         formatted_key = header + "\n"
         for i in range(0, len(core_key), 64):
@@ -28,16 +25,16 @@ try:
         conf["private_key"] = formatted_key
 
     # C. RESOLVE KEYWORD CONFLICTS
-    # We pull the URL out and delete the conflicting 'type' and 'spreadsheet_url' keys
+    # We pull the URL out and ensure it's named 'spreadsheet_url' for the function
     target_url = conf.pop("spreadsheet_url", None)
     conf.pop("type", None)
 
     # D. INITIALIZE
-    # We pass 'spreadsheet' as the primary argument, then unpack the rest (**conf)
+    # Changing 'spreadsheet' to 'spreadsheet_url' here
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet=target_url,
+        spreadsheet_url=target_url,
         **conf
     )
     
@@ -52,8 +49,7 @@ def load_data():
         transactions = conn.read(worksheet="Transactions")
         goals = conn.read(worksheet="Goals")
         return transactions, goals
-    except Exception as e:
-        # If sheets don't exist yet, return empty dataframes with correct columns
+    except Exception:
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -67,7 +63,6 @@ with st.sidebar:
     with tab1:
         with st.form("add_transaction"):
             date = st.date_input("Date")
-            # Get categories from Goals sheet, default to "General" if empty
             cat_list = df_goals['Category'].unique().tolist() if not df_goals.empty else ["General"]
             category = st.selectbox("Category", options=cat_list)
             amount = st.number_input("Amount", min_value=0.0, step=0.01)
@@ -94,15 +89,11 @@ with st.sidebar:
 
 # 5. MAIN DASHBOARD VISUALS
 if not df_goals.empty:
-    # Process numeric data
     df_tx['Amount'] = pd.to_numeric(df_tx['Amount'], errors='coerce').fillna(0)
     spend_summary = df_tx.groupby('Category')['Amount'].sum().reset_index()
-    
-    # Merge goals with actual spending
     comparison = pd.merge(df_goals, spend_summary, on='Category', how='left').fillna(0)
     comparison['Remaining'] = comparison['Monthly Goal'] - comparison['Amount']
     
-    # KPI Metrics
     cols = st.columns(min(len(comparison), 4))
     for i, row in comparison.iterrows():
         col_idx = i % 4
@@ -114,14 +105,12 @@ if not df_goals.empty:
             delta_color=color
         )
     
-    # Spending Chart
     fig = px.bar(
         comparison, 
         x='Category', 
         y=['Amount', 'Monthly Goal'], 
         barmode='group', 
-        title="Monthly Spending vs. Goals",
-        color_discrete_sequence=["#00CC96", "#636EFA"]
+        title="Monthly Spending vs. Goals"
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
