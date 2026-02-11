@@ -2,7 +2,6 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-import re
 
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
@@ -11,57 +10,36 @@ st.title("📊 Executive Budget Dashboard")
 def get_gspread_client():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     
-    # 1. Access the secrets
+    # Access secrets
     s = st.secrets["connections"]["gsheets"]
     
-    # 2. THE KEY SCRUBBER
-    # This removes literal '\n', spaces, and weird hidden characters (like Byte 4 or underscores)
-    raw_key = s["private_key"]
-    header = "-----BEGIN PRIVATE KEY-----"
-    footer = "-----END PRIVATE KEY-----"
+    # Clean the key: Replace literal '\n' and ensure it's a string
+    raw_key = str(s["private_key"]).replace("\\n", "\n")
     
-    # Remove header/footer to clean the middle
-    content = raw_key.replace(header, "").replace(footer, "")
-    # Remove everything that isn't a letter, number, plus, or slash (standard Base64)
-    content = re.sub(r'[^A-Za-z0-9+/=]', '', content)
-    
-    # Rebuild the key with proper line breaks every 64 characters
-    clean_key = header + "\n"
-    for i in range(0, len(content), 64):
-        clean_key += content[i:i+64] + "\n"
-    clean_key += footer
+    # DEBUG: See how much data the app is actually getting
+    st.write(f"DEBUG: Key length detected: {len(raw_key)} characters.")
 
     creds_dict = {
         "type": "service_account",
         "project_id": s["project_id"],
-        "private_key_id": s.get("private_key_id"),
-        "private_key": clean_key,
+        "private_key": raw_key,
         "client_email": s["client_email"],
-        "client_id": s.get("client_id"),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
     }
     
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
 
-# CONNECTION & APP LOGIC
 try:
     client = get_gspread_client()
-    sheet = client.open_by_url(st.secrets["connections"]["gsheets"]["spreadsheet_url"])
+    url = st.secrets["connections"]["gsheets"]["spreadsheet_url"]
+    sheet = client.open_by_url(url)
     
-    # Load data from the specific tabs
-    df_tx = pd.DataFrame(sheet.worksheet("Transactions").get_all_records())
+    # Test read
     df_goals = pd.DataFrame(sheet.worksheet("Goals").get_all_records())
-    
-    st.success("✅ Securely Connected to Google Sheets!")
-    
-    st.subheader("Current Budget Goals")
-    st.dataframe(df_goals, use_container_width=True)
-    
-    st.subheader("Recent Transactions")
-    st.dataframe(df_tx, use_container_width=True)
+    st.success("✅ Connection Successful!")
+    st.dataframe(df_goals)
 
 except Exception as e:
-    st.error(f"Final Connection Error: {e}")
-    st.info("Ensure the Private Key in your Secrets starts with -----BEGIN PRIVATE KEY-----")
+    st.error(f"Connection Error: {e}")
+    st.info("Check: 1. Did you use triple quotes in Secrets? 2. Did you copy the WHOLE key?")
