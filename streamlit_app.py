@@ -7,23 +7,26 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Manual Reconstructor)
+# 2. INITIALIZE CONNECTION (The Surgical Conflict Resolution)
 try:
-    # Pull secrets into a modifiable dictionary
+    # Get all secrets into a modifiable dictionary
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # THE RECONSTRUCTOR:
-    # We clean the key of any literal \n, spaces, or triple-quote artifacts
+    # RESOLVE THE CONFLICT:
+    # We remove 'type' from the dictionary because st.connection already 
+    # uses the 'type' argument for GSheetsConnection.
+    conf.pop("type", None)
+    
+    # Fix the private key line breaks (the Manual Reconstructor)
     if "private_key" in conf:
         raw_key = conf["private_key"]
-        # Remove literal backslashes and 'n's if they were interpreted as text
-        clean_key = raw_key.replace("\\n", "\n")
-        # Ensure it starts and ends cleanly
-        clean_key = clean_key.strip()
+        # This handles both literal \n and ensures physical breaks are preserved
+        clean_key = raw_key.replace("\\n", "\n").strip()
         conf["private_key"] = clean_key
 
-    # Connect!
+    # Connect! Now there is only ONE 'type' being passed.
     conn = st.connection("gsheets", type=GSheetsConnection, **conf)
+    
 except Exception as e:
     st.error(f"Connection Error: {e}")
     st.stop()
