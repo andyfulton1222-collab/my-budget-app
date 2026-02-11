@@ -7,15 +7,15 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The Precision Handshake)
+# 2. INITIALIZE CONNECTION (The Final Calibration)
 try:
     # 1. Get the raw secrets
     secret_dict = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. Pull the URL out (it needs to be handled separately)
+    # 2. Extract the URL (The library expects the name 'spreadsheet_url' here)
     target_url = secret_dict.pop("spreadsheet_url", None)
     
-    # 3. Clean up the internal labels that confuse the connection
+    # 3. Clean up the dictionary for the service account
     if "type" in secret_dict:
         del secret_dict["type"]
     
@@ -23,11 +23,11 @@ try:
     if "private_key" in secret_dict:
         secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
 
-    # 5. Connect! We pass the URL specifically and the rest as service_account info
+    # 5. Connect! Using the explicit 'spreadsheet_url' keyword
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet=target_url, 
+        spreadsheet_url=target_url, 
         service_account=secret_dict
     )
 except Exception as e:
