@@ -7,18 +7,20 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. THE CLEANER & CONFLICT RESOLUTION
+# 2. THE CLEANER & UNIFIED CONNECTION
 try:
     # 1. Create a modifiable COPY of the secrets
     conf = st.secrets["connections"]["gsheets"].to_dict()
     
-    # 2. RESOLVE DUPLICATE CONFLICTS:
-    # We pull the URL out and then DELETE it from the dict so it isn't passed twice.
-    target_url = conf.pop("spreadsheet_url", None)
-    # We also ensure 'type' is gone to avoid the previous error.
+    # 2. TRANSLATION: Move 'spreadsheet_url' to 'spreadsheet' inside the dict
+    # This satisfies the internal engine without using an external argument.
+    if "spreadsheet_url" in conf:
+        conf["spreadsheet"] = conf.pop("spreadsheet_url")
+    
+    # 3. Remove 'type' to avoid the "multiple values" collision
     conf.pop("type", None)
     
-    # 3. THE RSA KEY CLEANER: Rebuilds to 64-char blocks
+    # 4. THE RSA KEY CLEANER: Rebuilds to 64-char blocks
     if "private_key" in conf:
         p_key = conf["private_key"]
         header = "-----BEGIN PRIVATE KEY-----"
@@ -30,11 +32,10 @@ try:
         formatted_key += footer
         conf["private_key"] = formatted_key
 
-    # 4. Connect! Passing the URL once and the cleaned dict for the rest.
+    # 5. Connect! Everything is now inside the **conf "box"
     conn = st.connection(
         "gsheets", 
         type=GSheetsConnection, 
-        spreadsheet_url=target_url,
         **conf
     )
     
