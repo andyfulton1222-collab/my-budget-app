@@ -7,38 +7,12 @@ import plotly.express as px
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# 2. INITIALIZE CONNECTION (The "Single Object" Fix)
+# 2. INITIALIZE CONNECTION (The Streamlit-Native Fix)
 try:
-    # Get all secrets from the Streamlit vault
-    raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
-    
-    # Fix the private key line breaks (essential for RSA security)
-    if "private_key" in raw_secrets:
-        raw_secrets["private_key"] = raw_secrets["private_key"].replace("\\n", "\n")
-    
-    # We bundle the URL AND the credentials into one dictionary.
-    # We use 'spreadsheet' as the key because that's the standard for the inner engine.
-    sa_info = {
-        "spreadsheet": raw_secrets.get("spreadsheet_url"),
-        "type": "service_account",
-        "project_id": raw_secrets.get("project_id"),
-        "private_key_id": raw_secrets.get("private_key_id"),
-        "private_key": raw_secrets.get("private_key"),
-        "client_email": raw_secrets.get("client_email"),
-        "client_id": raw_secrets.get("client_id"),
-        "auth_uri": raw_secrets.get("auth_uri"),
-        "token_uri": raw_secrets.get("token_uri"),
-        "auth_provider_x509_cert_url": raw_secrets.get("auth_provider_x509_cert_url"),
-        "client_x509_cert_url": raw_secrets.get("client_x509_cert_url"),
-    }
-
-    # Connect! We only pass 'type' and 'service_account_info'.
-    # No more extra arguments to cause "unexpected keyword" errors.
-    conn = st.connection(
-        "gsheets", 
-        type=GSheetsConnection, 
-        service_account_info=sa_info
-    )
+    # We don't build dictionaries or rename anything. 
+    # We tell Streamlit: "Look at the [connections.gsheets] section in my secrets and connect."
+    # The library will automatically map 'spreadsheet_url', 'private_key', etc.
+    conn = st.connection("gsheets", type=GSheetsConnection)
     
 except Exception as e:
     st.error(f"Connection Error: {e}")
@@ -47,10 +21,12 @@ except Exception as e:
 # 3. LOAD DATA
 def load_data():
     try:
+        # Pulling data from the named tabs in your Google Sheet
         transactions = conn.read(worksheet="Transactions")
         goals = conn.read(worksheet="Goals")
         return transactions, goals
     except Exception:
+        # Fallback to empty DataFrames if the sheet is new
         return pd.DataFrame(columns=['Date', 'Category', 'Amount', 'Note']), \
                pd.DataFrame(columns=['Category', 'Monthly Goal'])
 
@@ -106,8 +82,7 @@ if not df_goals.empty:
             delta_color=color
         )
     
-    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], 
-                 barmode='group', title="Monthly Spending vs. Goals")
+    fig = px.bar(comparison, x='Category', y=['Amount', 'Monthly Goal'], barmode='group', title="Monthly Spending vs. Goals")
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Start by adding your first Budget Goal in the sidebar!")
