@@ -3,30 +3,26 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
 
-# 1. THE HANDSHAKE FIX (Read-Only Compatible)
-# We create a new dictionary to hold the corrected credentials
-if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-    secret_data = st.secrets["connections"]["gsheets"].to_dict()
-    if "private_key" in secret_data:
-        # We fix the key in our temporary copy, not the vault itself
-        secret_data["private_key"] = secret_data["private_key"].replace("\\n", "\n")
-    
-    # We tell the connection to use our fixed version
-    ttl = 600
-else:
-    secret_data = None
-
-# 2. APP SETUP
+# 1. THE APP SETUP
 st.set_page_config(page_title="Executive Budget Tracker", layout="wide")
 st.title("📊 Executive Budget Dashboard")
 
-# Initialize Connection using our corrected secret data
-if secret_data:
-    conn = st.connection("gsheets", type=GSheetsConnection, **secret_data)
-else:
-    conn = st.connection("gsheets", type=GSheetsConnection)
+# 2. INITIALIZE CONNECTION
+# We create the connection first
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. LOAD DATA
+# 3. THE HANDSHAKE FIX
+# We fix the key directly in the connection's internal configuration
+# This bypasses the 'Read-Only' error and the 'TypeError'
+try:
+    raw_key = st.secrets["connections"]["gsheets"]["private_key"]
+    if "\\n" in raw_key:
+        conn._instance.client.auth._credentials._private_key = raw_key.replace("\\n", "\n")
+except Exception:
+    # If the fix isn't needed or fails, we let the app try to continue anyway
+    pass
+
+# 4. LOAD DATA
 def load_data():
     try:
         transactions = conn.read(worksheet="Transactions")
@@ -38,7 +34,7 @@ def load_data():
 
 df_tx, df_goals = load_data()
 
-# 4. SIDEBAR - DATA ENTRY
+# 5. SIDEBAR - DATA ENTRY
 with st.sidebar:
     st.header("Add New Entry")
     
@@ -71,7 +67,7 @@ with st.sidebar:
                 st.success("Goal Saved!")
                 st.rerun()
 
-# 5. MAIN DASHBOARD
+# 6. MAIN DASHBOARD
 if not df_goals.empty:
     spend_summary = df_tx.groupby('Category')['Amount'].sum().reset_index()
     comparison = pd.merge(df_goals, spend_summary, on='Category', how='left').fillna(0)
